@@ -3,4 +3,4 @@ from django.apps import AppConfig
 
 class PavilionsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'pavilions'
+    name = 'apps.pavilions'
