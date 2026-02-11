@@ -118,6 +118,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# В продакшене STATIC_ROOT можно переопределять внешними настройками,
+# для разработки достаточно BASE_DIR / 'static'
+STATIC_ROOT = BASE_DIR / 'static'
+
+# Медиа-файлы (загруженные пользователями / через импорты)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

@@ -1,0 +1,12 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="/admin/pavilions/electricitymeter/import-meters/" class="addlink">
+            {% translate "Импорт счетчиков из Excel" %}
+        </a>
+    </li>
+{% endblock %}
+
