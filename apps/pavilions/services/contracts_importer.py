@@ -12,6 +12,7 @@ import pandas as pd
 from django.db import transaction
 
 from ..models import Building, Pavilion, Tenant, Contract
+from .pavilion_name_normalizer import find_pavilion_by_name
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +99,8 @@ class ContractsImporter:
         if not tenant_name or not contract_name or not pavilion_name:
             return
 
-        # Павильон
-        pavilion = Pavilion.objects.filter(building=building, name=pavilion_name).first()
+        # Павильон (с нормализацией названия)
+        pavilion = find_pavilion_by_name(pavilion_name, building=building)
         if not pavilion:
             if pavilion_name not in self.stats['unmatched_pavilions']:
                 self.stats['unmatched_pavilions'].append(pavilion_name)

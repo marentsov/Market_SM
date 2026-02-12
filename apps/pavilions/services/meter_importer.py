@@ -7,6 +7,7 @@ from datetime import datetime
 from django.conf import settings
 from django.db import transaction
 from ..models import Pavilion, ElectricityMeter, ElectricityReading
+from .pavilion_name_normalizer import expand_location_to_pavilion_names, find_pavilions_by_names
 import logging
 
 logger = logging.getLogger(__name__)
@@ -135,86 +136,6 @@ class MeterImporter:
             self.errors.append(f"Ошибка в листе '{sheet_name}': {str(e)}")
             return False
 
-    def _normalize_single_name(self, name):
-        """Убирает скобки, суффикс 5квт и т.п. из одного имени."""
-        base = name.strip()
-        if ' (' in base:
-            base = base.split(' (')[0].strip()
-        if ' ' in base:
-            before_space = base.split(' ', 1)[0]
-            if before_space and before_space[-1].isdigit():
-                base = before_space
-        return base
-
-    def _expand_location_to_pavilion_names(self, location_name):
-        """
-        Разворачивает строку расположения в список имён павильонов.
-        - Общий Г11/1, Г10/111/6 (+) -> [Г11/1] (берём только первый павильон)
-        - Общий В18/5, В18/519/7 -> [В18/5]
-        - Е10/1,2 -> [Е10/1, Е10/2] (один счётчик на несколько павильонов)
-        - Е11/5,6 -> [Е11/5, Е11/6]
-        - Г9/1, Д10/1, Д12/1 -> [Г9/1, Д10/1, Д12/1] (разные префиксы — каждое имя целиком)
-        - Е11/1 5квт -> [Е11/1]
-        - Пассаж 61 -> [Пассаж61] (нормализация пробелов)
-        """
-        base = location_name.strip()
-
-        # Общий X, Y (...) -> берём только первый павильон
-        if base.lower().startswith('общий '):
-            base = base[6:].strip()  # убираем "Общий "
-            if ',' in base:
-                base = base.split(',')[0].strip()
-        if ',' not in base:
-            base = self._normalize_single_name(base)
-            normalized = re.sub(r'\s+', '', base)
-            return [base] if base == normalized else [base, normalized]
-
-        parts = [p.strip() for p in base.split(',') if p.strip()]
-        if not parts:
-            return []
-
-        first = self._normalize_single_name(parts[0])
-        # Паттерн X/Y,Z: первый кусок "Е10/1", извлекаем префикс "Е10/"
-        match = re.match(r'^(.+/\s*)(\d+)$', first)
-        if match:
-            prefix, _ = match.group(1), match.group(2)
-            prefix = re.sub(r'\s+', '', prefix)
-            result = [first]
-            for p in parts[1:]:
-                p = p.strip()
-                if p.isdigit():
-                    result.append(prefix + p)
-                else:
-                    result.append(self._normalize_single_name(p))
-            return result
-
-        # Разные префиксы — каждое имя как есть
-        return [self._normalize_single_name(p) for p in parts]
-
-    def _find_pavilions_by_names(self, names):
-        """Ищет павильоны по списку имён, возвращает список найденных (без дублей)."""
-        found = []
-        seen_ids = set()
-        for name in names:
-            # Пробуем имя и его вариант без пробелов
-            for candidate in (name, re.sub(r'\s+', '', name)):
-                if not candidate:
-                    continue
-                try:
-                    p = Pavilion.objects.get(name=candidate)
-                    if p.id not in seen_ids:
-                        seen_ids.add(p.id)
-                        found.append(p)
-                    break
-                except Pavilion.DoesNotExist:
-                    continue
-                except Pavilion.MultipleObjectsReturned:
-                    p = Pavilion.objects.filter(name=candidate).first()
-                    if p and p.id not in seen_ids:
-                        seen_ids.add(p.id)
-                        found.append(p)
-                    break
-        return found
 
     def _process_row(self, row, reading_date):
         """
@@ -233,8 +154,8 @@ class MeterImporter:
                 return
 
             # Разворачиваем в список имён и ищем павильоны
-            names = self._expand_location_to_pavilion_names(location_name)
-            pavilions = self._find_pavilions_by_names(names)
+            names = expand_location_to_pavilion_names(location_name)
+            pavilions = find_pavilions_by_names(names)
 
             if not pavilions:
                 if location_name and location_name not in self.stats['unmatched_pavilions']:
