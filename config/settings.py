@@ -135,3 +135,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 ADMIN_SITE_HEADER = "Управление торговыми павильонами"
 ADMIN_SITE_TITLE = "Павильоны"
 ADMIN_INDEX_TITLE = "Администрирование системы"
+
+ADMIN_MEDIA_PREFIX = '/static/admin/'

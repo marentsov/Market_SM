@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
 from django.db.models import Count
@@ -11,6 +12,7 @@ from .models import (
 )
 from .services.meter_importer import MeterImporter
 from .services.excel_import import import_excel
+from .services.contracts_importer import ContractsImporter
 
 
 @admin.register(Building)
@@ -33,13 +35,25 @@ class BuildingAdmin(admin.ModelAdmin):
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ['name', 'phone', 'email', 'pavilions_count', 'created_at']
-    search_fields = ['name', 'phone', 'email']
+    list_display = ['name', 'inn', 'phone', 'email', 'pavilions_count', 'created_at']
+    search_fields = ['name', 'inn', 'phone', 'email']
     list_per_page = 50
+
+    readonly_fields = ['pavilions_display']
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'inn', 'phone', 'email')
+        }),
+        ('Павильоны', {
+            'fields': ('pavilions_display',),
+            'description': 'Павильоны, связанные с этим арендатором',
+        }),
+    )
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        queryset = queryset.annotate(_pavilions_count=Count('pavilion_set'))
+        queryset = queryset.annotate(_pavilions_count=Count('pavilion'))
         return queryset
 
     def pavilions_count(self, obj):
@@ -47,6 +61,28 @@ class TenantAdmin(admin.ModelAdmin):
 
     pavilions_count.short_description = 'Кол-во павильонов'
     pavilions_count.admin_order_field = '_pavilions_count'
+
+    def pavilions_display(self, obj):
+        """Список павильонов, связанных с арендатором."""
+        if not obj.pk:
+            return "—"
+        pavilions = obj.pavilion.all().select_related('building').order_by('building__name', 'name')
+        if not pavilions:
+            return "Нет связанных павильонов"
+        links = [
+            format_html(
+                '<a href="/admin/pavilions/pavilion/{}/change/">{}</a>',
+                p.id,
+                f"{p.building.name} — {p.name}"
+            )
+            for p in pavilions[:50]
+        ]
+        result = format_html_join(', ', '{}', ((link,) for link in links))
+        if pavilions.count() > 50:
+            return format_html('{} ... (+{})', result, pavilions.count() - 50)
+        return result
+
+    pavilions_display.short_description = 'Павильоны'
 
 
 @admin.register(Contract)
@@ -82,142 +118,233 @@ class ProductCategoryInline(admin.TabularInline):
     verbose_name_plural = 'Категории товаров'
 
 
+class PavilionAdminForm(forms.ModelForm):
+    # Группировка тегов по категориям для удобного отображения
+    TAGS_GROUPS = {
+        'Этажность': [
+            ('2_etazha', '2 этажа'),
+            ('3_etazha', '3 этажа'),
+            ('4_etazha', '4+ этажа'),
+        ],
+        'Крыша': [
+            ('krysha_novaya', 'Новая'),
+            ('krysha_horoshee', 'Хорошее состояние'),
+            ('krysha_remont', 'Требует ремонта'),
+        ],
+        'Коммуникации': [
+            ('gaz_est', 'Газ есть'),
+            ('gaz_net', 'Газа нет'),
+            ('voda_est', 'Вода есть'),
+            ('voda_net', 'Воды нет'),
+            ('otoplenie_central', 'Отопление центральное'),
+            ('otoplenie_avtonom', 'Отопление автономное'),
+            ('otoplenie_net', 'Отопления нет'),
+            ('ventilacia_est', 'Вентиляция есть'),
+            ('ventilacia_net', 'Вентиляции нет'),
+        ],
+        'Безопасность': [
+            ('signalizacia_est', 'Сигнализация есть'),
+            ('signalizacia_net', 'Сигнализации нет'),
+        ],
+        'Удобства': [
+            ('rampa_est', 'Погрузочная рампа'),
+            ('vitrina_est', 'Витрина'),
+            ('otdelny_vhod', 'Отдельный вход'),
+            ('parkovka', 'Парковка рядом'),
+        ],
+    }
+
+    # Плоский список всех тегов для choices (технически нужно для поля)
+    ALL_TAGS_CHOICES = []
+    for group_choices in TAGS_GROUPS.values():
+        ALL_TAGS_CHOICES.extend(group_choices)
+
+    # Поле для тегов с чекбоксами
+    tags = forms.MultipleChoiceField(
+        label='Дополнительные характеристики',
+        choices=ALL_TAGS_CHOICES,
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'vCheckboxSelectMultiple grouped-checkboxes'
+        }),
+        required=False,
+        help_text='Выберите характеристики, подходящие для этого павильона'
+    )
+
+    class Media:
+        css = {
+            'all': ('admin/css/pavilion_tags.css',)
+        }
+        js = ('admin/js/pavilion_tags.js',)
+
+    class Meta:
+        model = Pavilion
+        fields = '__all__'
+        widgets = {
+            'comment': forms.Textarea(attrs={'rows': 3, 'class': 'vLargeTextField'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Добавляем информацию о группах в атрибуты виджета
+        self.fields['tags'].widget.attrs['data-groups'] = str(self.TAGS_GROUPS)
+
+        # Если редактируем существующий объект - загружаем его теги
+        if self.instance.pk and self.instance.tags:
+            self.initial['tags'] = self.instance.tags
+
+    def clean_tags(self):
+        """Валидация тегов если нужно"""
+        tags = self.cleaned_data.get('tags', [])
+        # Здесь можно добавить логику, например:
+        # - нельзя выбрать одновременно "газ есть" и "газа нет"
+        # - нельзя выбрать больше 10 тегов и т.д.
+        return tags
+
+    def save(self, commit=True):
+        """Сохраняем выбранные теги в JSONField"""
+        instance = super().save(commit=False)
+
+        # Берём выбранные теги и сохраняем как список
+        instance.tags = self.cleaned_data.get('tags', [])
+
+        if commit:
+            instance.save()
+            # Если есть ManyToMany поля, сохраняем и их
+            self.save_m2m()
+
+        return instance
+
+
 @admin.register(Pavilion)
 class PavilionAdmin(admin.ModelAdmin):
-    list_display = [
-        'name',
-        'building_link',
-        'row',
-        'area',
-        'status_display',
-        'tenant_link',
-        'meters_count',
-        'created_at'
-    ]
+    form = PavilionAdminForm
+    change_list_template = "admin/pavilions/pavilion/change_list.html"
 
-    list_filter = ['status', 'building', 'row', 'created_at']
-    search_fields = ['name', 'row', 'comment']
-    list_per_page = 100
-
-    readonly_fields = ['created_at', 'updated_at', 'meters_display']
+    list_display = ['name', 'building', 'row', 'area', 'status', 'display_tags']
+    list_filter = ['building', 'status', 'tags']  # Фильтрация по тегам!
+    search_fields = ['name', 'comment']
 
     fieldsets = (
         ('Основная информация', {
             'fields': ('name', 'building', 'row', 'area', 'status')
         }),
         ('Аренда', {
-            'fields': ('tenant', 'contract'),
-            'classes': ('collapse',)
+            'fields': ('contract', 'tenant', 'product_categories'),
+            'classes': ('wide',),
         }),
-        ('Счетчики', {
-            'fields': ('meters_display',),
-            'classes': ('collapse',),
-            'description': 'Счетчики, привязанные к этому павильону',
+        ('🏷️ Дополнительные характеристики', {
+            'fields': ('tags',),
+            'classes': ('wide',),
+            'description': '''
+                <div style="background: #e8f5e9; padding: 10px; border-left: 4px solid #2e7d32; margin-bottom: 15px;">
+                    <strong>✓ Отметьте характеристики павильона</strong><br>
+                    Просто поставьте галочки напротив подходящих пунктов
+                </div>
+            '''
         }),
-        ('Дополнительно', {
+        ('Прочее', {
             'fields': ('comment', 'created_at', 'updated_at'),
-            'classes': ('collapse',)
+            'classes': ('collapse',),  # Скрыто по умолчанию
         }),
     )
 
-    inlines = [ProductCategoryInline]
+    readonly_fields = ['created_at', 'updated_at']
 
-    def meters_display(self, obj):
-        """Список счетчиков, привязанных к павильону."""
-        if not obj.pk:
-            return "—"
-        meters = ElectricityMeter.objects.filter(pavilions=obj).order_by('meter_number')
-        if not meters:
-            return "Нет привязанных счетчиков"
-        links = [
-            format_html('<a href="/admin/pavilions/electricitymeter/{}/change/">{}</a>', m.id, m.meter_number)
-            for m in meters[:50]
-        ]
-        result = format_html_join(', ', '{}', ((link,) for link in links))
-        if meters.count() > 50:
-            return format_html('{} ... (+{})', result, meters.count() - 50)
-        return result
+    def display_tags(self, obj):
+        """Красивое отображение тегов в списке"""
+        tags = obj.get_tags_display()
+        if tags:
+            if len(tags) > 5:
+                return f"{', '.join(tags[:5])} (+{len(tags) - 5})"
+            return ', '.join(tags)
+        return '—'  # Просто тире, без HTML
 
-    meters_display.short_description = 'Счетчики'
+    display_tags.short_description = 'Характеристики'
+    display_tags.allow_tags = True
 
-    # ДОБАВЛЯЕМ ССЫЛКУ НА ИМПОРТ ПАВИЛЬОНОВ
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path('import-excel/', self.import_excel_view, name='import_excel'),
+            path('import-contracts/', self.import_contracts_view, name='import_contracts'),
         ]
         return custom_urls + urls
 
     def import_excel_view(self, request):
-        """
-        Вью для импорта павильонов из Excel
-        """
+        """Вью для импорта павильонов из Excel."""
         if request.method == 'POST' and request.FILES.get('excel_file'):
             excel_file = request.FILES['excel_file']
-
             try:
-                # ЗАГРУЗКА EXCEL
                 total_in_file, created_count = import_excel(excel_file)
-
                 messages.success(
                     request,
                     f'Успешно загружено! Файл содержит {total_in_file} павильонов. '
                     f'Добавлено {created_count} новых павильонов.'
                 )
                 return redirect('admin:pavilions_pavilion_changelist')
-
             except Exception as e:
                 messages.error(request, f'Ошибка при загрузке: {str(e)}')
-
-        # Шаблон для загрузки файла
         context = dict(
             self.admin_site.each_context(request),
             title="Загрузить Excel с павильонами"
         )
         return render(request, 'admin/import_excel.html', context)
 
-    def building_link(self, obj):
-        return format_html(
-            '<a href="/admin/pavilions/building/{}/change/">{}</a>',
-            obj.building.id,
-            obj.building.name
+    def import_contracts_view(self, request):
+        """Вью для импорта договоров и арендаторов из Excel."""
+        if request.method == 'POST' and request.FILES.get('excel_file'):
+            excel_file = request.FILES['excel_file']
+            try:
+                importer = ContractsImporter(excel_file)
+                success = importer.import_data()
+                stats = importer.get_stats()
+
+                if success:
+                    s = stats['stats']
+                    messages.success(request, (
+                        f"Импорт завершён! "
+                        f"Создано арендаторов: {s['tenants_created']}, "
+                        f"обновлено: {s['tenants_updated']}. "
+                        f"Создано договоров: {s['contracts_created']}, "
+                        f"обновлено: {s['contracts_updated']}. "
+                        f"Обновлено павильонов: {s['pavilions_updated']}. "
+                        f"Ненайденных павильонов: {stats['unmatched_count']}."
+                    ))
+                    if stats['unmatched_count'] > 0:
+                        examples = s['unmatched_pavilions'][:5]
+                        messages.warning(
+                            request,
+                            f"Павильоны не найдены (примеры): {', '.join(examples)}"
+                        )
+                else:
+                    messages.error(request, "Ошибка при импорте")
+                    for err in stats['errors'][:5]:
+                        messages.error(request, err)
+
+                return redirect('admin:pavilions_pavilion_changelist')
+            except Exception as e:
+                messages.error(request, f'Ошибка при загрузке: {str(e)}')
+
+        context = dict(
+            self.admin_site.each_context(request),
+            title="Импорт договоров и арендаторов",
+            help_text=self._get_contracts_import_help_text()
         )
+        return render(request, 'admin/import_contracts.html', context)
 
-    building_link.short_description = 'Здание'
-    building_link.admin_order_field = 'building__name'
-
-    def tenant_link(self, obj):
-        if obj.tenant:
-            return format_html(
-                '<a href="/admin/pavilions/tenant/{}/change/">{}</a>',
-                obj.tenant.id,
-                obj.tenant.name
-            )
-        return "-"
-
-    tenant_link.short_description = 'Арендатор'
-    tenant_link.admin_order_field = 'tenant__name'
-
-    def status_display(self, obj):
-        colors = {
-            'free': 'green',
-            'rented': 'orange',
-            'reserved': 'blue',
-            'repair': 'red',
-        }
-        color = colors.get(obj.status, 'gray')
-        return format_html(
-            '<span style="color: {}; font-weight: bold;">{}</span>',
-            color,
-            obj.get_status_display()
-        )
-
-    status_display.short_description = 'Статус'
-
-    def meters_count(self, obj):
-        return obj.electricity_meters.count()
-
-    meters_count.short_description = 'Счетчиков'
+    def _get_contracts_import_help_text(self):
+        return """
+        <div style="background: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3>📋 Требования к файлу</h3>
+            <ul>
+                <li>Лист: <strong>актуальные арендаторы</strong></li>
+                <li>Колонки: <strong>Контрагент</strong>, <strong>ИНН</strong>, <strong>Договор</strong>, <strong>Объект</strong></li>
+                <li>Контрагент → арендатор, Договор → договор, Объект → павильон</li>
+                <li>Павильоны должны уже существовать (сначала импортируйте павильоны)</li>
+            </ul>
+        </div>
+        """
 
 
 class ElectricityReadingInline(admin.TabularInline):

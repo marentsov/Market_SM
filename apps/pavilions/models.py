@@ -29,6 +29,7 @@ class Building(models.Model):
 class Tenant(models.Model):
     """Арендатор"""
     name = models.CharField('Название компании/ФИО', max_length=300)
+    inn = models.CharField('ИНН', max_length=20, blank=True, db_index=True)
     phone = models.CharField('Телефон', max_length=20, blank=True)
     email = models.EmailField('Email', blank=True)
     created_at = models.DateTimeField('Дата регистрации', auto_now_add=True)
@@ -120,7 +121,8 @@ class Pavilion(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        verbose_name='Арендатор'
+        verbose_name='Арендатор',
+        related_name='pavilion'
     )
 
     product_categories = models.ManyToManyField(
@@ -143,6 +145,42 @@ class Pavilion(models.Model):
                 name='unique_pavilion_per_building'
             )
         ]
+
+    TAG_CHOICES = [
+        ('2_etazha', '2 этажа'),
+        ('3_etazha', '3 этажа'),
+        ('4_etazha', '4+ этажа'),
+        ('krysha_novaya', 'Крыша новая'),
+        ('krysha_horoshee', 'Крыша хорошее'),
+        ('krysha_remont', 'Крыша требует ремонта'),
+        ('gaz_est', 'Газ есть'),
+        ('gaz_net', 'Газа нет'),
+        ('voda_est', 'Вода есть'),
+        ('voda_net', 'Воды нет'),
+        ('otoplenie_central', 'Отопление центральное'),
+        ('otoplenie_avtonom', 'Отопление автономное'),
+        ('otoplenie_net', 'Отопления нет'),
+        ('ventilacia_est', 'Вентиляция есть'),
+        ('ventilacia_net', 'Вентиляции нет'),
+        ('signalizacia_est', 'Сигнализация есть'),
+        ('signalizacia_net', 'Сигнализации нет'),
+        ('rampa_est', 'Погрузочная рампа'),
+        ('vitrina_est', 'Витрина'),
+        ('otdelny_vhod', 'Отдельный вход'),
+        ('parkovka', 'Парковка рядом'),
+    ]
+
+    tags = models.JSONField(
+        'Теги павильона',
+        default=list,
+        blank=True,
+        help_text='Дополнительные характеристики павильона'
+    )
+
+    def get_tags_display(self):
+        """Получить читаемые названия тегов"""
+        display_dict = dict(self.TAG_CHOICES)
+        return [display_dict.get(tag, tag) for tag in self.tags]
 
     def __str__(self):
         return f'{self.building.name} - {self.name}'

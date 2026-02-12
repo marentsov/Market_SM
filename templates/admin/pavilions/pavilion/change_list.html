@@ -1,0 +1,16 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="/admin/pavilions/pavilion/import-excel/" class="addlink">
+            {% translate "Импорт павильонов" %}
+        </a>
+    </li>
+    <li>
+        <a href="/admin/pavilions/pavilion/import-contracts/" class="addlink">
+            {% translate "Импорт договоров" %}
+        </a>
+    </li>
+{% endblock %}
