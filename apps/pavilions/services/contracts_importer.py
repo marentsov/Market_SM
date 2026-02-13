@@ -1,7 +1,3 @@
-"""
-Импорт договоров и арендаторов из Excel.
-Лист "актуальные арендаторы": Контрагент, ИНН, Договор, Объект.
-"""
 import os
 import tempfile
 import logging
@@ -53,18 +49,23 @@ class ContractsImporter:
                 self.errors.append('Лист "актуальные арендаторы" не найден.')
                 return False
 
-            df = pd.read_excel(excel, sheet_name=sheet_name, dtype=str, na_filter=False)
+            df = pd.read_excel(
+                temp_path,
+                sheet_name=sheet_name,
+                dtype={'Контрагент': str, 'ИНН': str, 'Договор': str, 'Объект': str},
+                keep_default_na=False,
+                na_filter=False,
+                usecols=['Контрагент', 'ИНН', 'Договор', 'Объект']
+            )
 
             missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
             if missing:
                 self.errors.append(f'Отсутствуют колонки: {", ".join(missing)}')
                 return False
 
-            building = self._get_building()
-
             with transaction.atomic():
                 for _, row in df.iterrows():
-                    self._process_row(row, building)
+                    self._process_row(row)
 
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -82,14 +83,46 @@ class ContractsImporter:
                 return name
         return None
 
-    def _get_building(self):
+    def _extract_building_code(self, contract_name):
+        """
+        Извлекает шифр здания из названия договора.
+        Ищет паттерн 'КК/XXX' где XXX — буквы/цифры до пробела.
+        Возвращает шифр или None.
+        """
+        import re
+
+        match = re.search(r'(КК/[А-ЯA-Z0-9]+)', contract_name)
+        return match.group(1) if match else None
+
+    def _get_building_from_contract(self, contract_name):
+        """
+        Определяет здание по названию договора.
+        Возвращает объект Building.
+        """
+        BUILDING_CODE_MAP = {
+            'КК/АП': 'Славянский Стан',
+            'КК/В': 'Вещевой',
+            'КК/М': 'Строительный',
+            'КК/МБ': 'Строительный',
+        }
+        DEFAULT_BUILDING_NAME = 'Основной рынок'
+
+        code = self._extract_building_code(contract_name)
+
+        if code and code in BUILDING_CODE_MAP:
+            building_name = BUILDING_CODE_MAP[code]
+        else:
+            building_name = DEFAULT_BUILDING_NAME
+            if code:
+                self.errors.append(f'Неизвестный шифр здания: {code} в договоре "{contract_name}"')
+
         building, _ = Building.objects.get_or_create(
-            name="Основной рынок",
+            name=building_name,
             defaults={'address': ''}
         )
         return building
 
-    def _process_row(self, row, building):
+    def _process_row(self, row):
         """Обработка одной строки: контрагент -> арендатор, договор, объект -> павильон."""
         tenant_name = str(row['Контрагент']).strip()
         inn = str(row.get('ИНН', '')).strip()
@@ -99,12 +132,28 @@ class ContractsImporter:
         if not tenant_name or not contract_name or not pavilion_name:
             return
 
-        # Павильон (с нормализацией названия)
+        # 1. Определяем правильное здание по договору
+        building = self._get_building_from_contract(contract_name)
+
+        # 2. Сначала ищем в правильном здании
         pavilion = find_pavilion_by_name(pavilion_name, building=building)
+
+        # 3. Не нашли? Ищем везде
         if not pavilion:
-            if pavilion_name not in self.stats['unmatched_pavilions']:
-                self.stats['unmatched_pavilions'].append(pavilion_name)
-            return
+            pavilion = find_pavilion_by_name(pavilion_name)
+
+            if pavilion:
+                # Нашли в другом здании — записываем в errors
+                old_building = pavilion.building.name
+                self.errors.append(
+                    f"Павильон '{pavilion_name}' перенесён из '{old_building}' "
+                    f"в '{building.name}' (договор: {contract_name})"
+                )
+            else:
+                # Совсем не нашли — unmatched
+                if pavilion_name not in self.stats['unmatched_pavilions']:
+                    self.stats['unmatched_pavilions'].append(pavilion_name)
+                return
 
         # Арендатор
         tenant, created = Tenant.objects.get_or_create(
@@ -114,7 +163,7 @@ class ContractsImporter:
         if created:
             self.stats['tenants_created'] += 1
         else:
-            if inn:
+            if inn and tenant.inn != inn:
                 tenant.inn = inn
                 tenant.save()
                 self.stats['tenants_updated'] += 1
@@ -128,10 +177,25 @@ class ContractsImporter:
             self.stats['contracts_created'] += 1
 
         # Привязка к павильону
-        if pavilion.tenant_id != tenant.id or pavilion.contract_id != contract.id:
+        needs_update = False
+
+        if pavilion.building_id != building.id:
+            pavilion.building = building
+            needs_update = True
+
+        if pavilion.tenant_id != tenant.id:
             pavilion.tenant = tenant
+            needs_update = True
+
+        if pavilion.contract_id != contract.id:
             pavilion.contract = contract
+            needs_update = True
+
+        if pavilion.status != 'rented':
             pavilion.status = 'rented'
+            needs_update = True
+
+        if needs_update:
             pavilion.save()
             self.stats['pavilions_updated'] += 1
 

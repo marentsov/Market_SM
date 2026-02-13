@@ -38,7 +38,7 @@ def normalize_single_name(name):
 def expand_location_to_pavilion_names(location_name):
     """
     Разворачивает строку расположения в список имён павильонов.
-    
+
     Примеры:
     - 'Общий Г11/1, Г10/111/6 (+)' -> ['Г11/1'] (берём только первый)
     - 'Общий В18/5, В18/519/7' -> ['В18/5']
@@ -46,57 +46,59 @@ def expand_location_to_pavilion_names(location_name):
     - 'Е11/5,6' -> ['Е11/5', 'Е11/6']
     - 'Г9/1, Д10/1, Д12/1' -> ['Г9/1', 'Д10/1', 'Д12/1'] (разные префиксы)
     - 'Е11/1 5квт' -> ['Е11/1']
-    - 'Пассаж 61' -> ['Пассаж 61', 'Пассаж61'] (с пробелом и без)
-    
+    - 'Пассаж 61' -> ['Пассаж 61']
+    - 'Ц/32' -> ['Ц/32']  # ← ВАЖНО!
+
     Args:
         location_name: Строка с расположением из Excel
-        
+
     Returns:
         Список нормализованных названий павильонов
     """
     base = location_name.strip()
-    
+
+    # Если строка пустая
+    if not base:
+        return []
+
     # Общий X, Y (...) -> берём только первый павильон
     if base.lower().startswith('общий '):
-        base = base[6:].strip()  # убираем "Общий "
+        base = base[6:].strip()
         if ',' in base:
             base = base.split(',')[0].strip()
-    
-    # Если нет запятых - просто нормализуем и возвращаем варианты
+        return [normalize_single_name(base)]
+
+    # Если есть пробелы, но это не разделитель нескольких павильонов
+    # (например, "Ц/Кафе" - это один павильон)
+    if ' ' in base and not any(x in base for x in [',', '/', '-']):
+        # Возможно, это просто название с пробелом, не разделяём
+        return [normalize_single_name(base)]
+
+    # Если нет запятых - это один павильон
     if ',' not in base:
-        normalized = normalize_single_name(base)
-        normalized_no_spaces = re.sub(r'\s+', '', normalized)
-        # Возвращаем оба варианта если они различаются
-        if normalized == normalized_no_spaces:
-            return [normalized]
-        return [normalized, normalized_no_spaces]
-    
+        return [normalize_single_name(base)]
+
     # Есть запятые - разворачиваем
     parts = [p.strip() for p in base.split(',') if p.strip()]
     if not parts:
         return []
-    
+
+    result = []
     first = normalize_single_name(parts[0])
-    
+
     # Паттерн X/Y,Z: первый кусок "Е10/1", извлекаем префикс "Е10/"
     match = re.match(r'^(.+/\s*)(\d+)$', first)
-    if match:
-        prefix = match.group(1)
-        prefix = re.sub(r'\s+', '', prefix)
+    if match and all(p.isdigit() for p in parts[1:]):
+        # Все остальные части - только цифры, добавляем префикс
+        prefix = re.sub(r'\s+', '', match.group(1))
         result = [first]
-        
         for p in parts[1:]:
-            p = p.strip()
-            if p.isdigit():
-                # Просто цифра - добавляем префикс
-                result.append(prefix + p)
-            else:
-                # Полное имя - нормализуем
-                result.append(normalize_single_name(p))
-        return result
-    
-    # Разные префиксы — каждое имя как есть
-    return [normalize_single_name(p) for p in parts]
+            result.append(prefix + p.strip())
+    else:
+        # Разные имена - каждое как есть
+        result = [normalize_single_name(p) for p in parts]
+
+    return result
 
 
 def find_pavilions_by_names(names, building=None):

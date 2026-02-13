@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef
 from django.shortcuts import render, redirect
 from django.urls import path
 from django.contrib import messages
@@ -216,13 +216,35 @@ class PavilionAdminForm(forms.ModelForm):
         return instance
 
 
+class SuspiciousPavilionsFilter(admin.SimpleListFilter):
+    """кастомный фильтр для подозрительных павильонов (нет договора, но есть потребление)"""
+
+    title = 'Подозрительные (нет договора, но есть расход по счетчику)'
+    parameter_name = 'suspicious'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Да'),)
+
+    def queryset(self, request, queryset):
+        """фильтруем подозрительные павильоны"""
+        if self.value() == 'yes':
+            suspicios_readings = ElectricityReading.objects.filter(
+                    meter__pavilions=OuterRef('pk'),
+                    consumption__gt=1
+            )
+            return queryset.filter(
+                Exists(suspicios_readings),
+                tenant__isnull=True)
+        return queryset
+
+
 @admin.register(Pavilion)
 class PavilionAdmin(admin.ModelAdmin):
     form = PavilionAdminForm
     change_list_template = "admin/pavilions/pavilion/change_list.html"
 
     list_display = ['name', 'building', 'row', 'area', 'status', 'display_tags']
-    list_filter = ['building', 'status', 'tags']  # Фильтрация по тегам!
+    list_filter = ['building', 'status', 'tags', SuspiciousPavilionsFilter]
     search_fields = ['name', 'comment']
 
     fieldsets = (
