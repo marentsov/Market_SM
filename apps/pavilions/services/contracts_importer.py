@@ -8,7 +8,7 @@ import pandas as pd
 from django.db import transaction
 
 from ..models import Building, Pavilion, Tenant, Contract
-from .pavilion_name_normalizer import find_pavilion_by_name
+from .pavilion_name_normalizer import expand_location_to_pavilion_names, find_pavilions_by_names
 
 logger = logging.getLogger(__name__)
 
@@ -127,35 +127,48 @@ class ContractsImporter:
         tenant_name = str(row['Контрагент']).strip()
         inn = str(row.get('ИНН', '')).strip()
         contract_name = str(row['Договор']).strip()
-        pavilion_name = str(row['Объект']).strip()
+        pavilion_names_str = str(row['Объект']).strip()
 
-        if not tenant_name or not contract_name or not pavilion_name:
+        if not tenant_name or not contract_name or not pavilion_names_str:
             return
 
         # 1. Определяем правильное здание по договору
         building = self._get_building_from_contract(contract_name)
 
-        # 2. Сначала ищем в правильном здании
-        pavilion = find_pavilion_by_name(pavilion_name, building=building)
+        # 2. Разбиваем строку на отдельные названия павильонов
+        names = expand_location_to_pavilion_names(pavilion_names_str)
 
-        # 3. Не нашли? Ищем везде
-        if not pavilion:
-            pavilion = find_pavilion_by_name(pavilion_name)
+        # 3. Для каждого имени ищем павильон
+        found_pavilions = []
+        for name in names:
+            # Сначала ищем в правильном здании
+            pavilions_in_building = find_pavilions_by_names([name], building=building)
+            if pavilions_in_building:
+                pav = pavilions_in_building[0]
+                found_pavilions.append(pav)
+                continue
 
-            if pavilion:
-                # Нашли в другом здании — записываем в errors
-                old_building = pavilion.building.name
+            # Не нашли в здании — ищем везде
+            pavilions_anywhere = find_pavilions_by_names([name])
+            if pavilions_anywhere:
+                pav = pavilions_anywhere[0]
+                # Нашли в другом здании — запишем ошибку
+                old_building = pav.building.name
                 self.errors.append(
-                    f"Павильон '{pavilion_name}' перенесён из '{old_building}' "
+                    f"Павильон '{name}' перенесён из '{old_building}' "
                     f"в '{building.name}' (договор: {contract_name})"
                 )
+                found_pavilions.append(pav)
             else:
-                # Совсем не нашли — unmatched
-                if pavilion_name not in self.stats['unmatched_pavilions']:
-                    self.stats['unmatched_pavilions'].append(pavilion_name)
-                return
+                # Совсем не найден
+                if name not in self.stats['unmatched_pavilions']:
+                    self.stats['unmatched_pavilions'].append(name)
 
-        # Арендатор
+        if not found_pavilions:
+            # Если ни одного павильона не найдено — выходим
+            return
+
+        # 4. Арендатор (создаётся один раз на строку)
         tenant, created = Tenant.objects.get_or_create(
             name=tenant_name,
             defaults={'inn': inn}
@@ -168,36 +181,38 @@ class ContractsImporter:
                 tenant.save()
                 self.stats['tenants_updated'] += 1
 
-        # Договор
+        # 5. Договор (один на строку)
         contract, created = Contract.objects.get_or_create(
             name=contract_name,
             defaults={}
         )
         if created:
             self.stats['contracts_created'] += 1
+        # (обновление договора не предусмотрено, т.к. у него только имя)
 
-        # Привязка к павильону
-        needs_update = False
+        # 6. Для каждого найденного павильона обновляем атрибуты
+        for pav in found_pavilions:
+            needs_update = False
 
-        if pavilion.building_id != building.id:
-            pavilion.building = building
-            needs_update = True
+            if pav.building_id != building.id:
+                pav.building = building
+                needs_update = True
 
-        if pavilion.tenant_id != tenant.id:
-            pavilion.tenant = tenant
-            needs_update = True
+            if pav.tenant_id != tenant.id:
+                pav.tenant = tenant
+                needs_update = True
 
-        if pavilion.contract_id != contract.id:
-            pavilion.contract = contract
-            needs_update = True
+            if pav.contract_id != contract.id:
+                pav.contract = contract
+                needs_update = True
 
-        if pavilion.status != 'rented':
-            pavilion.status = 'rented'
-            needs_update = True
+            if pav.status != 'rented':
+                pav.status = 'rented'
+                needs_update = True
 
-        if needs_update:
-            pavilion.save()
-            self.stats['pavilions_updated'] += 1
+            if needs_update:
+                pav.save()
+                self.stats['pavilions_updated'] += 1
 
     def get_stats(self):
         return {

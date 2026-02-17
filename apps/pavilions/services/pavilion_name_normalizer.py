@@ -1,7 +1,3 @@
-"""
-Модуль для нормализации названий павильонов и поиска их в БД.
-Используется при импорте счётчиков, договоров и других операциях.
-"""
 import re
 
 from ..models import Pavilion
@@ -12,26 +8,26 @@ def normalize_single_name(name):
     Нормализует одно название павильона:
     - Убирает скобки и доп. инфо: 'Г21/1 (2 этаж)' -> 'Г21/1'
     - Убирает суффикс типа 5квт: 'Е11/1 5квт' -> 'Е11/1'
-    
+
     Args:
         name: Строка с названием павильона
-        
+
     Returns:
         Нормализованное название
     """
     base = name.strip()
-    
+
     # Скобки: Г21/1 (2 этаж) -> Г21/1
     if ' (' in base:
         base = base.split(' (')[0].strip()
-    
+
     # Пробел + суффикс (5квт и т.п.): Е11/1 5квт -> Е11/1
     # Отсекаем только если часть до пробела заканчивается цифрой (полный номер)
     if ' ' in base:
         before_space = base.split(' ', 1)[0]
         if before_space and before_space[-1].isdigit():
             base = before_space
-    
+
     return base
 
 
@@ -47,7 +43,8 @@ def expand_location_to_pavilion_names(location_name):
     - 'Г9/1, Д10/1, Д12/1' -> ['Г9/1', 'Д10/1', 'Д12/1'] (разные префиксы)
     - 'Е11/1 5квт' -> ['Е11/1']
     - 'Пассаж 61' -> ['Пассаж 61']
-    - 'Ц/32' -> ['Ц/32']  # ← ВАЖНО!
+    - 'Ц/32' -> ['Ц/32']
+    - 'Ж10/2 Ж10/3 Ж10/4' -> ['Ж10/2', 'Ж10/3', 'Ж10/4']  (НОВОЕ)
 
     Args:
         location_name: Строка с расположением из Excel
@@ -67,6 +64,14 @@ def expand_location_to_pavilion_names(location_name):
         if ',' in base:
             base = base.split(',')[0].strip()
         return [normalize_single_name(base)]
+
+    # --- НОВЫЙ БЛОК: несколько павильонов через пробел с '/' ---
+    # Проверяем: есть пробелы, и все части содержат '/'
+    if ' ' in base:
+        parts = base.split()
+        # Если каждая часть содержит '/', значит это несколько павильонов
+        if all('/' in part for part in parts):
+            return [normalize_single_name(part) for part in parts]
 
     # Если есть пробелы, но это не разделитель нескольких павильонов
     # (например, "Ц/Кафе" - это один павильон)
@@ -104,36 +109,36 @@ def expand_location_to_pavilion_names(location_name):
 def find_pavilions_by_names(names, building=None):
     """
     Ищет павильоны по списку имён с учётом нормализации.
-    
+
     Args:
         names: Список названий павильонов
         building: Опционально - здание для ограничения поиска
-        
+
     Returns:
         Список найденных объектов Pavilion (без дублей)
     """
     found = []
     seen_ids = set()
-    
+
     for name in names:
         if not name:
             continue
-        
+
         # Пробуем имя и его вариант без пробелов
         candidates = [name]
         normalized = re.sub(r'\s+', '', name)
         if normalized != name:
             candidates.append(normalized)
-        
+
         for candidate in candidates:
             if not candidate:
                 continue
-            
+
             try:
                 query = Pavilion.objects.filter(name=candidate)
                 if building:
                     query = query.filter(building=building)
-                
+
                 pavilion = query.first()
                 if pavilion and pavilion.id not in seen_ids:
                     seen_ids.add(pavilion.id)
@@ -141,7 +146,7 @@ def find_pavilions_by_names(names, building=None):
                     break
             except Exception:
                 continue
-    
+
     return found
 
 
@@ -149,11 +154,11 @@ def find_pavilion_by_name(name, building=None):
     """
     Ищет один павильон по названию с учётом нормализации.
     Удобная обёртка для случаев, когда нужен один павильон.
-    
+
     Args:
         name: Название павильона
         building: Опционально - здание для ограничения поиска
-        
+
     Returns:
         Объект Pavilion или None
     """
