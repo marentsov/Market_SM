@@ -85,11 +85,38 @@ class TenantAdmin(admin.ModelAdmin):
     pavilions_display.short_description = 'Павильоны'
 
 
+class ContractPavilionInline(admin.TabularInline):
+
+    model = Pavilion
+    fields = ['name', 'building', 'status', 'tenant']
+    readonly_fields = ['name', 'building', 'status', 'tenant']
+    can_delete = False
+    extra = 0
+    verbose_name = 'Павильон по договору'
+    verbose_name_plural = 'Павильоны по договору'
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Contract)
 class ContractAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_at']
     search_fields = ['name']
     list_per_page = 50
+
+    inlines = [ContractPavilionInline]
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        queryset = queryset.annotate(_pavilions_count=Count('pavilion'))
+        return queryset
+
+    def pavilions_count(self, obj):
+        return obj._pavilions_count
+
+    pavilions_count.short_description = 'Кол-во павильонов'
+    pavilions_count.admin_order_field = '_pavilions_count'
 
 
 @admin.register(ProductCategory)
@@ -116,6 +143,25 @@ class ProductCategoryInline(admin.TabularInline):
     extra = 1
     verbose_name = 'Категория товаров'
     verbose_name_plural = 'Категории товаров'
+
+
+class MetersByPavilionInline(admin.TabularInline):
+    """Счетчики павильона"""
+    model = ElectricityMeter.pavilions.through
+    extra = 0
+    verbose_name = 'Счетчик павильона'
+    verbose_name_plural = 'Счетчики павильона'
+    can_delete = False
+
+    fields = ['meter_link', ]
+    readonly_fields = ['meter_link', ]
+
+    def meter_link(self, obj):
+        meter = obj.electricitymeter
+        url = f'/admin/pavilions/electricitymeter/{meter.id}/change/'
+        return format_html('<a href="{}">{}</a>', url, meter.meter_number)
+
+    meter_link.short_description = 'Номер счетчика'
 
 
 class PavilionAdminForm(forms.ModelForm):
@@ -255,7 +301,7 @@ class PavilionAdmin(admin.ModelAdmin):
             'fields': ('contract', 'tenant', 'product_categories'),
             'classes': ('wide',),
         }),
-        ('🏷️ Дополнительные характеристики', {
+        ('Дополнительные характеристики', {
             'fields': ('tags',),
             'classes': ('wide',),
             'description': '''
@@ -270,6 +316,8 @@ class PavilionAdmin(admin.ModelAdmin):
             'classes': ('collapse',),  # Скрыто по умолчанию
         }),
     )
+
+    inlines = [MetersByPavilionInline]
 
     readonly_fields = ['created_at', 'updated_at']
 
@@ -413,7 +461,6 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
 
     inlines = [ElectricityReadingInline]
 
-    # ДОБАВЛЯЕМ ССЫЛКУ НА ИМПОРТ СЧЕТЧИКОВ
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -599,3 +646,8 @@ class ElectricityReadingAdmin(admin.ModelAdmin):
 
     meter_link.short_description = 'Счетчик'
     meter_link.admin_order_field = 'meter__meter_number'
+
+
+
+
+
