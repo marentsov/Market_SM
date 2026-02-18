@@ -111,4 +111,3 @@ python manage.py runserver
 - **ElectricityMeter**: счетчик электроэнергии (M2M с Pavilion)
 - **ElectricityReading**: показания счетчика (автоматический расчет потребления)
 
-. 
