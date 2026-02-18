@@ -263,10 +263,8 @@ class MeterImporter:
 
             report_content = "\n".join(report_lines)
 
-            # Готовим директорию внутри MEDIA_ROOT
             media_root = getattr(settings, "MEDIA_ROOT", None)
             if not media_root:
-                # На всякий случай, если MEDIA_ROOT не настроен
                 media_root = settings.BASE_DIR / "media"
 
             errors_dir = os.path.join(media_root, "meter_import_errors")
@@ -275,16 +273,11 @@ class MeterImporter:
             filename = f"meters_import_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
             file_path = os.path.join(errors_dir, filename)
 
-            # Сохраняем отчет обычным файловым write
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(report_content)
 
-            # Абсолютный путь на диске
             self.error_report_path = file_path
-
-            # Относительный URL, если MEDIA_URL настроен
             media_url = getattr(settings, "MEDIA_URL", "/media/")
-            # Убираем возможный BASE_DIR из пути и приводим к относительному
             self.error_report_url = f"{media_url.rstrip('/')}/meter_import_errors/{filename}"
 
         except Exception as e:

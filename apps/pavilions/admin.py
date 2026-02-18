@@ -165,7 +165,6 @@ class MetersByPavilionInline(admin.TabularInline):
 
 
 class PavilionAdminForm(forms.ModelForm):
-    # Группировка тегов по категориям для удобного отображения
     TAGS_GROUPS = {
         'Этажность': [
             ('2_etazha', '2 этажа'),
@@ -200,12 +199,10 @@ class PavilionAdminForm(forms.ModelForm):
         ],
     }
 
-    # Плоский список всех тегов для choices (технически нужно для поля)
     ALL_TAGS_CHOICES = []
     for group_choices in TAGS_GROUPS.values():
         ALL_TAGS_CHOICES.extend(group_choices)
 
-    # Поле для тегов с чекбоксами
     tags = forms.MultipleChoiceField(
         label='Дополнительные характеристики',
         choices=ALL_TAGS_CHOICES,
@@ -231,32 +228,20 @@ class PavilionAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Добавляем информацию о группах в атрибуты виджета
         self.fields['tags'].widget.attrs['data-groups'] = str(self.TAGS_GROUPS)
-
-        # Если редактируем существующий объект - загружаем его теги
         if self.instance.pk and self.instance.tags:
             self.initial['tags'] = self.instance.tags
 
     def clean_tags(self):
         """Валидация тегов если нужно"""
-        tags = self.cleaned_data.get('tags', [])
-        # Здесь можно добавить логику, например:
-        # - нельзя выбрать одновременно "газ есть" и "газа нет"
-        # - нельзя выбрать больше 10 тегов и т.д.
-        return tags
+        return self.cleaned_data.get('tags', [])
 
     def save(self, commit=True):
         """Сохраняем выбранные теги в JSONField"""
         instance = super().save(commit=False)
-
-        # Берём выбранные теги и сохраняем как список
         instance.tags = self.cleaned_data.get('tags', [])
-
         if commit:
             instance.save()
-            # Если есть ManyToMany поля, сохраняем и их
             self.save_m2m()
 
         return instance
@@ -313,7 +298,7 @@ class PavilionAdmin(admin.ModelAdmin):
         }),
         ('Прочее', {
             'fields': ('comment', 'created_at', 'updated_at'),
-            'classes': ('collapse',),  # Скрыто по умолчанию
+            'classes': ('collapse',),
         }),
     )
 
@@ -328,7 +313,7 @@ class PavilionAdmin(admin.ModelAdmin):
             if len(tags) > 5:
                 return f"{', '.join(tags[:5])} (+{len(tags) - 5})"
             return ', '.join(tags)
-        return '—'  # Просто тире, без HTML
+        return '—'
 
     display_tags.short_description = 'Характеристики'
     display_tags.allow_tags = True
@@ -406,7 +391,7 @@ class PavilionAdmin(admin.ModelAdmin):
     def _get_contracts_import_help_text(self):
         return """
         <div style="background: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3>📋 Требования к файлу</h3>
+            <h3>Требования к файлу</h3>
             <ul>
                 <li>Лист: <strong>актуальные арендаторы</strong></li>
                 <li>Колонки: <strong>Контрагент</strong>, <strong>ИНН</strong>, <strong>Договор</strong>, <strong>Объект</strong></li>
@@ -476,13 +461,11 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
             excel_file = request.FILES['excel_file']
 
             try:
-                # Импортируем данные
                 importer = MeterImporter(excel_file)
                 success = importer.import_data()
                 stats = importer.get_stats()
 
                 if success:
-                    # Показываем статистику
                     messages.success(request, f"""
                         Импорт завершен успешно!
                         Обработано листов: {stats['stats']['sheets_processed']}
@@ -492,27 +475,23 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
                         Ненайденных павильонов: {stats['unmatched_count']}
                     """)
 
-                    # Если есть ненайденные павильоны
                     if stats['unmatched_count'] > 0:
                         messages.warning(request,
                                          f"Найдено {stats['unmatched_count']} ненайденных павильонов. "
                                          "Проверьте названия павильонов в файле."
                                          )
-                        # Показываем первые 5 ненайденных павильонов
                         if hasattr(importer, 'stats') and importer.stats.get('unmatched_pavilions'):
                             unmatched = importer.stats['unmatched_pavilions'][:5]
                             messages.info(request,
                                           f"Примеры ненайденных павильонов: {', '.join(unmatched)}"
                                           )
 
-                    # Показываем ошибки (первые 5)
                     if stats['errors']:
                         for error in stats['errors'][:5]:
                             messages.error(request, error)
                         if len(stats['errors']) > 5:
                             messages.error(request, f"... и еще {len(stats['errors']) - 5} ошибок")
 
-                    # Если сформирован файл отчета об ошибках
                     if stats.get('has_error_report') and stats.get('error_report_path'):
                         messages.warning(
                             request,
@@ -530,7 +509,6 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
             except Exception as e:
                 messages.error(request, f'Ошибка при загрузке: {str(e)}')
 
-        # Шаблон для загрузки файла
         context = dict(
             self.admin_site.each_context(request),
             title="Импорт счетчиков из Excel",
@@ -544,7 +522,7 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
         """
         return """
         <div style="background: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3>📋 Инструкция по загрузке счетчиков:</h3>
+            <h3>Инструкция по загрузке счетчиков</h3>
             <p><strong>Требования к файлу:</strong></p>
             <ul>
                 <li>Файл должен быть в формате Excel (.xlsx)</li>

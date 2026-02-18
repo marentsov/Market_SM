@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'apps.pavilions',
+    'apps.dashboard',
 ]
 
 MIDDLEWARE = [
@@ -131,7 +132,6 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Добавьте в конец settings.py
 ADMIN_SITE_HEADER = "Управление торговыми павильонами"
 ADMIN_SITE_TITLE = "Павильоны"
 ADMIN_INDEX_TITLE = "Администрирование системы"

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дашборд - Управление павильонами</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: #417690;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 28px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 600;
+            color: #417690;
+        }
+
+        .stat-card.warning .value {
+            color: #f39c12;
+        }
+
+        .stat-card.danger .value {
+            color: #e74c3c;
+        }
+
+        .stat-card.success .value {
+            color: #27ae60;
+        }
+
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #417690;
+            padding-bottom: 10px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .status-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #417690;
+        }
+
+        .status-item.free {
+            border-left-color: #27ae60;
+        }
+
+        .status-item.rented {
+            border-left-color: #3498db;
+        }
+
+        .status-item.reserved {
+            border-left-color: #f39c12;
+        }
+
+        .status-item.repair {
+            border-left-color: #e74c3c;
+        }
+
+        .status-item .label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .status-item .value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .buildings-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .building-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .building-item .name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .building-item .stat {
+            text-align: center;
+        }
+
+        .building-item .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .building-item .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #417690;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #417690;
+            transition: width 0.3s;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            header h1 {
+                font-size: 22px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+
+            .stat-card .value {
+                font-size: 24px;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .building-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .building-item .stat {
+                text-align: left;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Дашборд управления павильонами</h1>
+            <p>Общая статистика и метрики</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Всего павильонов</h3>
+                <div class="value">{{ total_pavilions }}</div>
+            </div>
+
+            <div class="stat-card success">
+                <h3>Арендовано</h3>
+                <div class="value">{{ rented_pavilions }}</div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Свободно</h3>
+                <div class="value">{{ free_pavilions }}</div>
+            </div>
+
+            <div class="stat-card warning">
+                <h3>Подозрительные</h3>
+                <div class="value">{{ suspicious_pavilions }}</div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Зданий</h3>
+                <div class="value">{{ total_buildings }}</div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Арендаторов</h3>
+                <div class="value">{{ total_tenants }}</div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Договоров</h3>
+                <div class="value">{{ total_contracts }}</div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Счетчиков</h3>
+                <div class="value">{{ total_meters }}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Статусы павильонов</h2>
+            <div class="status-grid">
+                <div class="status-item free">
+                    <div class="label">Свободен</div>
+                    <div class="value">{{ free_pavilions }}</div>
+                </div>
+                <div class="status-item rented">
+                    <div class="label">Арендован</div>
+                    <div class="value">{{ rented_pavilions }}</div>
+                </div>
+                <div class="status-item reserved">
+                    <div class="label">Забронирован</div>
+                    <div class="value">{{ reserved_pavilions }}</div>
+                </div>
+                <div class="status-item repair">
+                    <div class="label">На ремонте</div>
+                    <div class="value">{{ repair_pavilions }}</div>
+                </div>
+            </div>
+            {% if total_pavilions > 0 %}
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ occupancy_rate }}%"></div>
+            </div>
+            <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                Загруженность: {{ occupancy_rate }}%
+            </p>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2>Общая площадь</h2>
+            <div class="stat-card" style="margin-top: 0;">
+                <h3>Суммарная площадь павильонов</h3>
+                <div class="value">{{ total_area|floatformat:2 }} м²</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Электроэнергия</h2>
+            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                <div class="stat-card">
+                    <h3>Всего счетчиков</h3>
+                    <div class="value">{{ total_meters }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Показаний</h3>
+                    <div class="value">{{ total_readings }}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Потребление</h3>
+                    <div class="value">{{ total_consumption|floatformat:2 }} кВт·ч</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Павильонов со счетчиками</h3>
+                    <div class="value">{{ pavilions_with_meters }}</div>
+                </div>
+            </div>
+        </div>
+
+        {% if buildings_stats %}
+        <div class="section">
+            <h2>Топ зданий по количеству павильонов</h2>
+            <div class="buildings-list">
+                {% for building in buildings_stats %}
+                <div class="building-item">
+                    <div class="name">{{ building.name }}</div>
+                    <div class="stat">
+                        <div class="stat-label">Всего</div>
+                        <div class="stat-value">{{ building.pavilions_count }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Арендовано</div>
+                        <div class="stat-value" style="color: #3498db;">{{ building.rented_count }}</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Свободно</div>
+                        <div class="stat-value" style="color: #27ae60;">{{ building.free_count }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>Система управления торговыми павильонами</p>
+        </div>
+    </div>
+</body>
+</html>
