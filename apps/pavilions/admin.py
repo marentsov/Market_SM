@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import render, redirect
 from django.urls import path
 from django.contrib import messages
@@ -269,14 +269,36 @@ class SuspiciousPavilionsFilter(admin.SimpleListFilter):
         return queryset
 
 
+class WhithoutCommunicationPavilionsFilter(admin.SimpleListFilter):
+    """кастомный фильтр для павильонов у которых счетчик не на связи больше 720 часов"""
+    title = 'Павильоны счетчики которых не на связи больше 720 часов'
+    parameter_name = 'without_communication'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Да'),)
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            # Находим счётчики, у которых last_verified_hours_ago > 720 или NULL
+            stale_meters = ElectricityMeter.objects.filter(
+                Q(last_verified_hours_ago__gt=720) | Q(last_verified_hours_ago__isnull=True),
+                pavilions=OuterRef('pk')
+            )
+            return queryset.filter(Exists(stale_meters))
+        return queryset
+
+
+
 @admin.register(Pavilion)
 class PavilionAdmin(admin.ModelAdmin):
     form = PavilionAdminForm
     change_list_template = "admin/pavilions/pavilion/change_list.html"
 
-    list_display = ['name', 'building', 'row', 'area', 'status', 'display_tags']
-    list_filter = ['building', 'status', 'tags', SuspiciousPavilionsFilter]
+    list_display = ['name', 'building', 'row', 'area', 'status', 'display_tags', 'contract', 'tenant']
+    list_filter = ['building', 'status', 'tags', SuspiciousPavilionsFilter, WhithoutCommunicationPavilionsFilter]
     search_fields = ['name', 'comment']
+
+    list_select_related = ('contract', 'tenant')
 
     fieldsets = (
         ('Основная информация', {
@@ -411,12 +433,30 @@ class ElectricityReadingInline(admin.TabularInline):
     ordering = ['-date']
 
 
+class WithoutCommunicationMetersFilter(admin.SimpleListFilter):
+    """кастомный фильтр для счетчиков которые без связи больше 720 часов"""
+
+    title = 'Не на связи больше 720 часов'
+    parameter_name = 'stale'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Да'),)
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(
+                Q(last_verified_hours_ago__gt=720) | Q(last_verified_hours_ago__isnull=True)
+            )
+        return queryset
+
+
 @admin.register(ElectricityMeter)
 class ElectricityMeterAdmin(admin.ModelAdmin):
     change_list_template = "admin/pavilions/electricitymeter/change_list.html"
     list_display = [
         'meter_number',
         'pavilion_link',
+        'contracts_display',
         'serial_number',
         'location',
         'last_verified_hours_ago',
@@ -424,7 +464,7 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
         'last_reading_date_display'
     ]
 
-    list_filter = ['pavilions__building']
+    list_filter = ['pavilions__building', WithoutCommunicationMetersFilter]
     search_fields = ['meter_number', 'serial_number', 'pavilions__name']
     list_per_page = 50
 
@@ -586,6 +626,28 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
         return "-"
 
     last_reading_date_display.short_description = 'Дата последних показаний'
+
+    def get_queryset(self, request):
+        """Оптимизируем загрузку павильонов и их договоров"""
+        qs = super().get_queryset(request)
+        # prefetch_related позволяет загрузить все связанные павильоны и их договоры одним дополнительным запросом
+        return qs.prefetch_related('pavilions__contract')
+
+    def contracts_display(self, obj):
+        """
+        Возвращает список уникальных названий договоров,
+        связанных с павильонами данного счётчика.
+        """
+        # Используем множество, чтобы избежать дублирования договоров,
+        # если несколько павильонов имеют один и тот же договор.
+        contract_names = set()
+        for pavilion in obj.pavilions.all():
+            if pavilion.contract:  # проверяем, есть ли договор
+                contract_names.add(pavilion.contract.name)
+        return ', '.join(contract_names) if contract_names else '—'
+
+    contracts_display.short_description = 'Договоры'
+    contracts_display.admin_order_field = None  # сортировка не предусмотрена
 
 
 @admin.register(ElectricityReading)
