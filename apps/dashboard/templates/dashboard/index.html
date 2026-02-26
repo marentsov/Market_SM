@@ -206,6 +206,41 @@
             font-size: 14px;
         }
 
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .table thead {
+            background: #e0e0e0;
+        }
+
+        .table th,
+        .table td {
+            padding: 10px 12px;
+            font-size: 14px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .table tbody tr:nth-child(even) {
+            background: #fdfdfd;
+        }
+
+        .table tbody tr:hover {
+            background: #f1f1f1;
+        }
+
+        .card-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
         @media (max-width: 768px) {
             body {
                 padding: 10px;
@@ -260,66 +295,90 @@
         </header>
 
         <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Всего павильонов</h3>
-                <div class="value">{{ total_pavilions }}</div>
-            </div>
+            <a href="{% url 'dashboard:pavilions_list' %}" class="card-link">
+                <div class="stat-card">
+                    <h3>Всего павильонов</h3>
+                    <div class="value">{{ total_pavilions }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card success">
-                <h3>Арендовано</h3>
-                <div class="value">{{ rented_pavilions }}</div>
-            </div>
+            <a href="{% url 'dashboard:pavilions_list' %}?preset=rented" class="card-link">
+                <div class="stat-card success">
+                    <h3>Арендовано</h3>
+                    <div class="value">{{ rented_pavilions }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card">
-                <h3>Свободно</h3>
-                <div class="value">{{ free_pavilions }}</div>
-            </div>
+            <a href="{% url 'dashboard:pavilions_list' %}?preset=free" class="card-link">
+                <div class="stat-card">
+                    <h3>Свободно</h3>
+                    <div class="value">{{ free_pavilions }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card warning">
-                <h3>Подозрительные</h3>
-                <div class="value">{{ suspicious_pavilions }}</div>
-            </div>
+            <a href="{% url 'dashboard:pavilions_list' %}?preset=suspicious" class="card-link">
+                <div class="stat-card warning">
+                    <h3>Подозрительные</h3>
+                    <div class="value">{{ suspicious_pavilions }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card">
-                <h3>Зданий</h3>
-                <div class="value">{{ total_buildings }}</div>
-            </div>
+            <a href="{% url 'dashboard:buildings_list' %}" class="card-link">
+                <div class="stat-card">
+                    <h3>Зданий</h3>
+                    <div class="value">{{ total_buildings }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card">
-                <h3>Арендаторов</h3>
-                <div class="value">{{ total_tenants }}</div>
-            </div>
+            <a href="{% url 'dashboard:tenants_list' %}" class="card-link">
+                <div class="stat-card">
+                    <h3>Арендаторов</h3>
+                    <div class="value">{{ total_tenants }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card">
-                <h3>Договоров</h3>
-                <div class="value">{{ total_contracts }}</div>
-            </div>
+            <a href="{% url 'dashboard:contracts_list' %}" class="card-link">
+                <div class="stat-card">
+                    <h3>Договоров</h3>
+                    <div class="value">{{ total_contracts }}</div>
+                </div>
+            </a>
 
-            <div class="stat-card">
-                <h3>Счетчиков</h3>
-                <div class="value">{{ total_meters }}</div>
-            </div>
+            <a href="{% url 'dashboard:meters_list' %}" class="card-link">
+                <div class="stat-card">
+                    <h3>Счетчиков</h3>
+                    <div class="value">{{ total_meters }}</div>
+                </div>
+            </a>
         </div>
 
         <div class="section">
             <h2>Статусы павильонов</h2>
             <div class="status-grid">
-                <div class="status-item free">
-                    <div class="label">Свободен</div>
-                    <div class="value">{{ free_pavilions }}</div>
-                </div>
-                <div class="status-item rented">
-                    <div class="label">Арендован</div>
-                    <div class="value">{{ rented_pavilions }}</div>
-                </div>
-                <div class="status-item reserved">
-                    <div class="label">Забронирован</div>
-                    <div class="value">{{ reserved_pavilions }}</div>
-                </div>
-                <div class="status-item repair">
-                    <div class="label">На ремонте</div>
-                    <div class="value">{{ repair_pavilions }}</div>
-                </div>
+                <a href="{% url 'dashboard:pavilions_list' %}?preset=free" class="card-link">
+                    <div class="status-item free">
+                        <div class="label">Свободен</div>
+                        <div class="value">{{ free_pavilions }}</div>
+                    </div>
+                </a>
+                <a href="{% url 'dashboard:pavilions_list' %}?preset=rented" class="card-link">
+                    <div class="status-item rented">
+                        <div class="label">Арендован</div>
+                        <div class="value">{{ rented_pavilions }}</div>
+                    </div>
+                </a>
+                <a href="{% url 'dashboard:pavilions_list' %}?preset=reserved" class="card-link">
+                    <div class="status-item reserved">
+                        <div class="label">Забронирован</div>
+                        <div class="value">{{ reserved_pavilions }}</div>
+                    </div>
+                </a>
+                <a href="{% url 'dashboard:pavilions_list' %}?preset=repair" class="card-link">
+                    <div class="status-item repair">
+                        <div class="label">На ремонте</div>
+                        <div class="value">{{ repair_pavilions }}</div>
+                    </div>
+                </a>
             </div>
             {% if total_pavilions > 0 %}
             <div class="progress-bar">
@@ -383,6 +442,84 @@
                 </div>
                 {% endfor %}
             </div>
+        </div>
+        {% endif %}
+
+        {% if top_tenants %}
+        <div class="section">
+            <h2>Крупнейшие арендаторы по количеству павильонов</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Арендатор</th>
+                        <th>Количество павильонов</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tenant in top_tenants %}
+                    <tr>
+                        <td>{{ tenant.name }}</td>
+                        <td>{{ tenant.pavilions_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if recent_readings %}
+        <div class="section">
+            <h2>Последние показания счетчиков</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Счетчик</th>
+                        <th>Павильон</th>
+                        <th>Показания (кВт·ч)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reading in recent_readings %}
+                    <tr>
+                        <td>{{ reading.date }}</td>
+                        <td>{{ reading.meter.meter_number }}</td>
+                        <td>
+                            {% if reading.meter.pavilions.all %}
+                                {{ reading.meter.pavilions.all.0.building.name }} — {{ reading.meter.pavilions.all.0.name }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>{{ reading.meter_reading|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if suspicious_pavilions_list %}
+        <div class="section">
+            <h2>Подозрительные павильоны</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Здание</th>
+                        <th>Павильон</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pavilion in suspicious_pavilions_list %}
+                    <tr>
+                        <td>{{ pavilion.building.name }}</td>
+                        <td>{{ pavilion.name }}</td>
+                        <td>{{ pavilion.get_status_display }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
         {% endif %}
 

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Арендаторы</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header {
+            background: #417690;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        header h1 { font-size: 24px; font-weight: 500; }
+        header a { color: #fff; text-decoration: none; font-size: 14px; border: 1px solid rgba(255,255,255,0.6); padding: 6px 10px; border-radius: 4px; }
+        .section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .section h2 { font-size: 18px; margin-bottom: 15px; border-bottom: 2px solid #417690; padding-bottom: 8px; }
+        .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 10px; }
+        .filters label { font-size: 12px; color: #555; display: block; margin-bottom: 4px; }
+        .filters input[type="text"], .filters select { width: 100%; padding: 6px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; }
+        .btn { padding: 7px 12px; border-radius: 4px; border: none; font-size: 14px; cursor: pointer; margin-top: 6px; }
+        .btn-primary { background: #417690; color: #fff; }
+        .btn-secondary { background: #e0e0e0; color: #333; text-decoration: none; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #f8f9fa; border-radius: 6px; overflow: hidden; }
+        .table thead { background: #e0e0e0; }
+        .table th, .table td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+        .table tbody tr:nth-child(even) { background: #fdfdfd; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #417690; color: #fff; }
+        .pagination { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+        .pagination-links a { margin-right: 6px; text-decoration: none; color: #417690; }
+        @media (max-width: 768px) { body { padding: 10px; } header { flex-direction: column; align-items: flex-start; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Арендаторы</h1>
+            <a href="{% url 'dashboard:index' %}">Назад к дашборду</a>
+        </header>
+
+        <div class="section">
+            <h2>Фильтры</h2>
+            <form method="get">
+                <div class="filters">
+                    <div>
+                        <label for="has_pavilions">Наличие павильонов</label>
+                        <select name="has_pavilions" id="has_pavilions">
+                            <option value="">Не важно</option>
+                            <option value="yes" {% if current_has_pavilions == 'yes' %}selected{% endif %}>Есть</option>
+                            <option value="no" {% if current_has_pavilions == 'no' %}selected{% endif %}>Нет</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="q">Поиск по имени / ИНН / телефону</label>
+                        <input type="text" id="q" name="q" value="{{ current_search }}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <a href="{% url 'dashboard:tenants_list' %}" class="btn btn-secondary">Сбросить</a>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>Список арендаторов</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Арендатор</th>
+                        <th>ИНН</th>
+                        <th>Контакты</th>
+                        <th>Павильонов</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tenant in tenants %}
+                    <tr>
+                        <td>{{ tenant.name }}</td>
+                        <td>{{ tenant.inn|default:"—" }}</td>
+                        <td>
+                            {% if tenant.phone %}{{ tenant.phone }}{% else %}—{% endif %}
+                            {% if tenant.email %}<br>{{ tenant.email }}{% endif %}
+                        </td>
+                        <td>
+                            {% if tenant.pavilions_count %}
+                                <span class="badge">{{ tenant.pavilions_count }}</span>
+                            {% else %}
+                                0
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">Арендаторы не найдены.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="pagination">
+                <div>
+                    Всего: {{ page_obj.paginator.count }}.
+                    Страница {{ page_obj.number }} из {{ page_obj.paginator.num_pages }}.
+                </div>
+                <div class="pagination-links">
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}{% if current_has_pavilions or current_search %}&amp;has_pavilions={{ current_has_pavilions }}&amp;q={{ current_search }}{% endif %}">« Назад</a>
+                    {% endif %}
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if current_has_pavilions or current_search %}&amp;has_pavilions={{ current_has_pavilions }}&amp;q={{ current_search }}{% endif %}">Вперёд »</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

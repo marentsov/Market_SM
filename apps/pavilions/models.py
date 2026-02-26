@@ -194,6 +194,21 @@ class Pavilion(models.Model):
         return self.electricity_meters.count()
 
 
+class ElectricShield(models.Model):
+    """Электрощиток, к которому подключены счётчики."""
+    name = models.CharField('Название щита', max_length=100, unique=True)
+    description = models.TextField('Описание', blank=True)
+    created_at = models.DateTimeField('Дата создания', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Электрощиток'
+        verbose_name_plural = 'Электрощитки'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class ElectricityMeter(models.Model):
     """
     Счетчик электроэнергии.
@@ -206,6 +221,16 @@ class ElectricityMeter(models.Model):
         related_name='electricity_meters',
         blank=True,
         help_text='Павильоны, которые обслуживает этот счетчик'
+    )
+
+    electric_shield = models.ForeignKey(
+        ElectricShield,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Электрощиток',
+        related_name='meters',
+        help_text='К какому электрощиту подключён этот счётчик'
     )
 
     # Основные данные счетчика

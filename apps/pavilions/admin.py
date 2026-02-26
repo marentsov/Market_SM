@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.http import HttpResponse
 from .models import (
     Building, Pavilion, Tenant, Contract,
-    ProductCategory, ElectricityMeter, ElectricityReading
+    ProductCategory, ElectricShield, ElectricityMeter, ElectricityReading
 )
 from .services.meter_importer import MeterImporter
 from .services.excel_import import import_excel
@@ -117,6 +117,23 @@ class ContractAdmin(admin.ModelAdmin):
 
     pavilions_count.short_description = 'Кол-во павильонов'
     pavilions_count.admin_order_field = '_pavilions_count'
+
+
+@admin.register(ElectricShield)
+class ElectricShieldAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'meters_count', 'created_at']
+    search_fields = ['name', 'description']
+    list_per_page = 50
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.annotate(_meters_count=Count('meters'))
+
+    def meters_count(self, obj):
+        return obj._meters_count
+
+    meters_count.short_description = 'Кол-во счётчиков'
+    meters_count.admin_order_field = '_meters_count'
 
 
 @admin.register(ProductCategory)
@@ -458,13 +475,14 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
         'pavilion_link',
         'contracts_display',
         'serial_number',
+        'electric_shield',
         'location',
         'last_verified_hours_ago',
         'current_reading_display',
         'last_reading_date_display'
     ]
 
-    list_filter = ['pavilions__building', WithoutCommunicationMetersFilter]
+    list_filter = ['pavilions__building', 'electric_shield', WithoutCommunicationMetersFilter]
     search_fields = ['meter_number', 'serial_number', 'pavilions__name']
     list_per_page = 50
 
@@ -472,7 +490,7 @@ class ElectricityMeterAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Основная информация', {
-            'fields': ('pavilions', 'meter_number', 'serial_number')
+            'fields': ('pavilions', 'meter_number', 'serial_number', 'electric_shield')
         }),
         ('Дополнительно', {
             'fields': ('location', 'last_verified_hours_ago', 'comment'),
